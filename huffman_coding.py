@@ -3,12 +3,14 @@ import binascii
 import sys
 
 class Node:
+	# Used to build the Huffman tree
 	name = ""
 	value = 0
 	child1 = None
 	child2 = None	
 
 	def nprint(self):
+		# A recursive function that prints out the name of the node, then the child nodes. 
 		print("Name: "+self.name+", value: "+str(self.value))
 		if self.child1 != None:
 			self.child1.nprint()
@@ -16,8 +18,9 @@ class Node:
 			self.child2.nprint()
 
 	def generate_binary(self, starting_value):
+		# A recursive function that generates the binary string for all leaves underneath it.
 		leaves = []
-		if len(self.name) == 1: # We are a leaf
+		if len(self.name) == 1: # We are a leaf because the name length is only 1 character long
 			leaves.append((self.name, starting_value))
 		else:
 			if self.child1 != None:
@@ -27,6 +30,7 @@ class Node:
 		return leaves
 
 def convert_to_binary_string(value, starting_bit):
+	# Used to convert a decimal value to a binary string of variable length
 	if starting_bit == 0:
 		return ""
 	if ((value - pow(2,starting_bit - 1)) >= 0):
@@ -35,6 +39,7 @@ def convert_to_binary_string(value, starting_bit):
 		return "0"+convert_to_binary_string(value, starting_bit - 1)
 
 def convert_to_char_from_binary(binary):
+	# Used to convert a binary string back into a character value
 	value = 0
 	for i in range(len(binary)):
 		value += int(binary[i]) * pow(2, 7 - i)
@@ -42,18 +47,24 @@ def convert_to_char_from_binary(binary):
 
 
 def compress(filename, outfile):
+	# Main function used to compress text
 	print("Preparing to compress " + filename + " using Huffman Coding")
 	file = open(filename)
 	text = ""
+	# Read contents of file into memory...
 	for line in file:
 		text += line
+
 	chars = {}
+	# Generate a dictionary of individual keys and they frequencies...
 	for char in text:
 		if char in chars:
 			chars[char] += 1
 		else:
 			chars[char] = 1
+
 	sorted_list = []
+	# Create a sorted list of tuples based on the dictionary of character keys
 	for key, value in sorted(chars.iteritems(), key=lambda (k,v): (v,k), reverse=True):
 		sorted_list.append((key, value))
 	print("Character dictionary generated, size: " + str(len(chars)) + ".")
@@ -70,50 +81,72 @@ def compress(filename, outfile):
 
 	# Build the tree
 	while(len(nodes) > 1):
+		# Get rid of the bottom two nodes...
 		bottom_node_1 = nodes.pop()
 		bottom_node_2 = nodes.pop()
+
+		# Create a new node and populate it with information from the two nodes that were popped...
 		new_node = Node()
 		new_node.name = bottom_node_1.name + bottom_node_2.name
 		new_node.value = bottom_node_1.value + bottom_node_2.value
 		new_node.child1 = bottom_node_1
 		new_node.child2 = bottom_node_2
+
+		# Find where to insert the newly created tree...
 		inserted = 0
 		for i in range(len(nodes)):
 			if nodes[i].value <= new_node.value:
-				nodes.insert(i, new_node)
-				inserted = 1
+				nodes.insert(i, new_node) # insert the newly created node into the tree
+				inserted = 1 # Mark it as inserted
 				break
 		if inserted == 0:
+			# If it was never inserted into the list, it means it was lower than any other values so we just add it to the end
 			nodes.append(new_node)
-	root = nodes[0]
+
+	# Set root node to the only node left in the list
+	root = nodes[0] 
 	print("Tree completed.")
 
 	# Now we want to generate the binary value for each character
-	binary_characters = root.generate_binary("") # In the form (char, binary string)
+	binary_characters = root.generate_binary("")
 	binary_characters_dict = {}
+
+	# We've created a list of tuples of characters and their binary representations.
+	# Now we want to convert it to a dictionary.
 	for key,value in binary_characters:
 		binary_characters_dict[key] = value
 	print("Binary numbers generated for each leaf node.\nPreparing to compress text.")
 
 
-	# Now let's actually convert the text!
-	encoded_text = ""
+	# Now let's actually compress the text!
+	compressed_text = ""
 	for character in text:
-		encoded_text += binary_characters_dict[character]
+		compressed_text += binary_characters_dict[character]
 	print("Text compression complete.\nPreparing to convert key to binary.")
-	# Alright, text converted into binary and all added up. 
-	# Now we need to put the key in as well
+	# Alright, text converted into binary and concatenated into one string!
+
+	# Now we need to convert the key to binary as well in order to be able to insert it into the same file as the compressed data
+	# First compress the key into a single string
 	total_key = ""
 	for character, value in binary_characters:
 		total_key += character + ":" +value + ","
 
+	# Generate the binary encoding of the key
 	total_key = total_key[:-1] # Get rid of the last comma
 	binary_key = ""
+	char_might_be_semicolon = 0 # Flag to see if the character is a semicolon or just a separator
 	for char in total_key:
-		if char == ":":
-			binary_key += "10000000"
+		if char == ":": # If the character is a potential separator...
+			if char_might_be_semicolon == 1: # We have encountered 2 semicolons in a row, meaning a semicolon was the key
+				binary_key += convert_to_binary_string(ord(char),8)+ "10000000"  # Add the binary version of the character and an unusable value to the binary_key as a separator 
+				char_might_be_semicolon = 0
+			else: # This might be a separator but we're not sure, so don't add anything yet.
+				char_might_be_semicolon = 1 
 		else:
-			binary_key += convert_to_binary_string(ord(char),8)
+			if char_might_be_semicolon == 1:
+				binary_key += "10000000" # The last character was a separator but we did not add it to the binary_key, let's do it now
+			char_might_be_semicolon = 0
+			binary_key += convert_to_binary_string(ord(char),8) # Add the binary version of the character to the binary_key
 	
 	i = 0
 	extracted_key = ""
@@ -124,7 +157,7 @@ def compress(filename, outfile):
 	print("Key converted successfully.")
 
 	# Ok, now we have the key in binary form and we need to create the total binary string
-	total_binary = binary_key + "00000000" + encoded_text
+	total_binary = binary_key + "00000000" + compressed_text
 
 	# Now we have to make sure that it's a multiple of 8 so when we convert it to bits, it won't have any overflow or underflow.
 	print("In order to store the file as bytes, we need to ensure the total length is a multiple of 8.")
