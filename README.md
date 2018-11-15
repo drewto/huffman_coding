@@ -6,4 +6,4 @@ Usage:
 	Compression:
 		huffman_coding.py compress <input_file> <output_file>
 	Decompression:
-		huffman_coding.py decompress <input_file> <output_file>
+		huffman_coding.py decompress <input_file> <output_file>#spreadsheet
